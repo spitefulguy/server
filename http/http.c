@@ -5,28 +5,41 @@
 #include "stdio.h"
 #include <time.h>
 
-struct request* encode_request(char *request){
-	int i;
+int encode_request(char *req_c, struct Request *req_r){
 	char *ptr;
-	struct request *req = malloc(sizeof(struct request));
 
-	if (strstr(request,"GET")) req->method = GET;
-	else if (strstr(request, "POST")) req->method = POST;
-	else {
-		free(req);
-		return NULL;
+	if 		( memcmp(req_c, GET, strlen(GET)) ) 	req_r->method = GET;
+	else if ( memcmp(req_c, POST, strlen(POST)) ) req_r->method = POST;
+	else{
+		printf("Wrong method\n");
+		return -1;
 	}
 
-	ptr = strchr(request, '/');
-	req->url = malloc(sizeof(char) * (strchr(ptr, ' ') - ptr) + 1);
 
-	i = 0;
-	do{
-		req->url[i] = ptr[i];
-	} while( ptr[++i] != ' ');
-	req->url[i] = '\0';
+	ptr = req_c + strlen(req_r->method);
+	if (memcmp (ptr, "/", 1)) {
+		printf("Wrong URI\n");
+		return -1;
+	}
+	req_r->uri = ptr;
 
-	return req;
+	ptr = strchr(ptr, ' ');
+	if 		(memcmp( (++ptr), HTTP_09, strlen(HTTP_09))) req_r->version = HTTP_09;
+	else if (memcmp( (++ptr), HTTP_10, strlen(HTTP_10))) req_r->version = HTTP_10;
+	else if (memcmp( (++ptr), HTTP_11, strlen(HTTP_11))) req_r->version = HTTP_11;
+	else {
+		printf("Wrong version\n");
+		return -1;
+	}
+
+	//TODO: add Host: parsing
+
+	if (!strstr(ptr, HTTP_REQ_END)) {
+		printf("Request incomplete\n");
+		return 0;
+	}
+
+	return 1;
 }
 
 

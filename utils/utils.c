@@ -19,7 +19,7 @@ const char *weekday(int year, int month, int day) {
 }
 
 char* get_extension(const char *filename) {
-	int len = strlen(filename);
+	int len = (int)(strchr(filename, ' ') - filename);
 	int i = len;
 
 	while (*(filename + i) != '.') {

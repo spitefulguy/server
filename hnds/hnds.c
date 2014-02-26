@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <pthread.h>
 
 #include "../settings.h"
 #include "../http/http.h"
@@ -14,9 +15,15 @@
 #define HEADERS_SIZE 512
 
 static ssize_t send_file(int fd, char* filename, char *ext) {
-	char fullpath[strlen(filename) + strlen(ROOT) + 1];
+	int len = (int)(strchr(filename, ' ') - filename);
 
-	sprintf(fullpath, "%s%s", ROOT, filename);
+	printf("File requested %.*s\n", len, filename );
+
+	char fullpath[len + strlen(ROOT) + 1];
+	int result;
+
+	strcpy(fullpath, ROOT);
+	strncat(fullpath, filename, len);
 
 	int file = open(fullpath, O_RDONLY);
 	if (file == -1) {
@@ -32,55 +39,98 @@ static ssize_t send_file(int fd, char* filename, char *ext) {
 	int headers_size;
 	struct stat st;
 
-
 	fstat(file, &st);
 
 	headers_size = set_headers(headers, fullpath, st.st_size, ext);
-	response_size = st.st_size + headers_size + 20;
+	response_size = st.st_size + headers_size + 2;
 
-
-	content = (char *)malloc( sizeof(char) * (st.st_size + 1) );
-	response = (char *)malloc( sizeof(char)* response_size);
-
-	printf("Memmory allocated for response %d\n", response_size);
-	printf("Memory allocated for content %d\n", (int)(st.st_size + 1));
+	content = 	(char *)malloc( sizeof(char) *(st.st_size + 1) );
+	response = 	(char *)malloc( sizeof(char)* response_size);
 
 	if (!content || !response) {
 		fprintf(stderr, "malloc failed\n");
+		return -1;
 	}
 
-	printf("Bytes read %d\n", read(file, content, st.st_size - 2)) ;
-	//content[st.st_size] = '\0';
+	result = read(file, content, st.st_size - 2);
+	content[result] = '\0';
 
 	close(file);
+	result = sprintf(response, "%s%s", headers, content);
 
-	printf("Bytes printed into response %d\n", sprintf(response, "%s%s", headers, content));
-
-	write(fd, response, response_size);
-	close(fd);
+	write(fd, response, result);
+	//close(fd);
 	//fprintf(stderr, "Bytes sent (send_file)%d\n", response_size);
 
 	free(content);
 	free(response);
 
-	return response_size;
+	return result;
 }
 
-void common_handler(char *request, int fd) {
-	struct request *req = encode_request(request);
-	if (!req) {
-		fprintf(stderr, "Not a valid HTTP requset\n");
-		return;
-
-	}
-	printf("URL requested %s\n", req->url);
-
+int common_handler(struct Request *req_r, int fd) {
 	char *ext;
-
-	ext = get_extension(req->url);
-	//printf("For file %s extension defined %s\n", req->url, ext);
+	ext = get_extension(req_r->uri);
 	if (ext)
-		printf("Bytes sent %d\n", send_file(fd, req->url, ext));
+		return send_file(fd, req_r->uri, ext);
+	else {
+		//printf("Default page loaded\n");
+		return send_file(fd, "/index.html ", "html");
+	}
+
 }
 
+void *wait_request(void *fd) {
+	int *cfd = fd;
+	printf("Thread created for %d\n", *cfd);
+	struct Request *request;
+	while (!(request = buffer_store(NULL, *cfd, REQ_OBTAIN)))
+		;
+	common_handler(request, *cfd);
+
+	printf("Closing connection %d\n", *cfd);
+	close(*cfd);
+	free(fd);
+	pthread_exit(NULL);
+	return 0;
+}
+
+struct Request *buffer_store(char *buf, int cfd, int action) {
+	static char bufs[MAX_CONNECTIONS][IN_BUF_SIZE];
+	static struct Request reqs[MAX_CONNECTIONS];
+	static int conditions[MAX_CONNECTIONS];
+	int status;
+
+	if (action == REQ_STORE && conditions[cfd] == REQ_COND_EMPTY) {
+		strcpy(bufs[cfd], buf);
+		conditions[cfd] = REQ_COND_RAW;
+		return NULL;
+	}
+	if (action == REQ_STORE && conditions[cfd] == REQ_COND_INCOMP) {
+			strcat(bufs[cfd], buf);
+			conditions[cfd] = REQ_COND_RAW;
+			return NULL;
+		}
+
+	if (action == REQ_OBTAIN && conditions[cfd] == REQ_COND_RAW) {
+		status = encode_request(bufs[cfd], &reqs[cfd]);
+		if (status == -1)
+			{
+				close(cfd);
+				conditions[cfd] = REQ_COND_EMPTY;
+				return NULL;
+			}
+		if (status == 1) {
+			conditions[cfd] = REQ_COND_EMPTY;
+			return &reqs[cfd];
+		}
+		if (status == 0) {
+			conditions[cfd] = REQ_COND_INCOMP;
+			return NULL;
+		}
+	} else {
+		return NULL;
+	}
+	return NULL;
+}
 
