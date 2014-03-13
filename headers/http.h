@@ -39,6 +39,7 @@
 #define HTTP_CLOSE 		"Close\r\n"
 #define HTTP_KEEPALIVE	"Keep-alive\r\n"
 
+#define HTTP_LINE_ENDING "\r\n"
 #define HTTP_REQ_END "\r\n\r\n"
 
 struct request{

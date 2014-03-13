@@ -10,10 +10,10 @@ typedef struct {
 	uint8_t set[16];
 } reserved_set;
 
-int max_encoded_buffer_size(int decoded_buffer_size);
-int percent_encode(char *in_buff, int in_len, char* out_buff, int out_len);
-int percent_encode_custom(const reserved_set *set, char *in_buff, int in_len, char* out_buff, int out_len);
-int percent_decode(char *in_buff, int in_len, char* out_buff, int out_len);
+//int max_encoded_buffer_size(int decoded_buffer_size);
+//int percent_encode(char *in_buff, int in_len, char* out_buff, int out_len);
+//int percent_encode_custom(const reserved_set *set, char *in_buff, int in_len, char* out_buff, int out_len);
+int percent_decode(const char *in_buff, int in_len, char* out_buff, int out_len);
 
 extern const reserved_set all_reserved_set;
 extern const reserved_set conservative_reserved_set;

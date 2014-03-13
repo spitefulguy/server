@@ -128,7 +128,7 @@ static bool is_hex_char(int c) {
 // - malformed input
 // - unexpected end-of-buffer for input
 // - inexpected end-of-buffer for output
-int percent_decode(char *in_buff, int in_len, char* out_buff, int out_len) {
+int percent_decode(const char *in_buff, int in_len, char* out_buff, int out_len) {
 	int in_pos, out_pos;
 	in_pos = out_pos = 0;
 

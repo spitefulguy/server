@@ -1,9 +1,12 @@
+#define _GNU_SOURCE
+//#define DEBUG
+
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
 #include <netinet/in.h>
-#include <fcntl.h>
+//#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -23,7 +26,7 @@ int init_socket() {
 	int sfd ;
 	struct sockaddr_in server_addr;
 
-	sfd = socket(AF_INET, SOCK_STREAM, 0);
+	sfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	if (sfd == -1)
 		return -1;
 
@@ -37,58 +40,42 @@ int init_socket() {
 	return sfd;
 }
 
-int set_nonblocking(int fd){
-	int flags;
-
-	flags = fcntl(fd, F_GETFD, 0);
-	if (flags == -1)
-		return -1;
-
-	flags |= O_NONBLOCK;
-
-	if (fcntl(fd, F_SETFD, flags) == -1)
-		return -1;
-
-	return 0;
-}
-
 int accept_connection(int sfd, int epfd){
 	unsigned int addr_len;
 	struct sockaddr_in client_addr;
+	addr_len = sizeof(client_addr);
 	int cfd;
 
-	addr_len = sizeof(client_addr);
-	cfd = accept(sfd, (struct sockaddr *)&client_addr, &addr_len);
-	if (cfd == -1) {
-		return -1;
-		perror("Connection socket accept");
+	while (1) {
+		cfd = accept4(sfd, (struct sockaddr *)&client_addr, &addr_len, SOCK_CLOEXEC | SOCK_NONBLOCK);
+		if (cfd == -1) {
+			if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+			  return 0;
+			}
+			perror("Connection socket accept");
+			return -1;
+		}
+
+		struct epoll_event event;
+		event.data.fd = cfd;
+		event.events = EPOLLIN | EPOLLET;
+		if (epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, &event) == -1) {
+			perror("epoll_ctl(connection socket)");
+			return -1;
+		}
+
+		access_connections_list(cfd, 0, ACT_STORE);
+		printf("Connection %d accepted\n", cfd);
 	}
-
-	//printf("Connection %d accepted\n", cfd);
-	if (set_nonblocking(cfd) == -1){
-		return -1;
-		perror("Set non-blocking");
-	}
-
-	struct epoll_event event;
-	event.data.fd = cfd;
-	event.events = EPOLLIN | EPOLLET;
-	if (epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, &event) == -1) {
-		perror("epoll_ctl(connection socket)");
-		return -1;
-	}
-
-	access_connections_list(cfd, 0, ACT_STORE);
-
-	return cfd;
+	return 0;
 }
 
 int main(int argc, char **argv) {
 	struct epoll_event events[MAX_EPOLL_EVENTS];
-	int epfd, nfds;
+	int epfd;
 	int sfd;
 
-	char recv_buf[IN_BUF_SIZE];
+	char recv_buf[MAX_REQUEST_LENGTH];
 	pthread_t threads[WORKERS];
 
 	sfd = init_socket();
@@ -97,9 +84,9 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	if (set_nonblocking(sfd) == -1) {
-		perror("Set listener non-blocking");
-		return -1;
+	int set = 1;
+	if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, (void *)&set, sizeof(int)) == -1) {
+		perror("Set REUSEADDR");
 	}
 
 	if (listen(sfd, MAX_LISTEN) == -1){
@@ -125,32 +112,63 @@ int main(int argc, char **argv) {
 	for (i = 0; i < WORKERS; i++) {
 		pthread_create(&threads[i], NULL, wait_for_request, (void *)i);
 	}
+
 	printf("Server has started successfully\n");
 
 	for(;;) {
+		int nfds;
 		nfds = epoll_wait(epfd, events, MAX_EPOLL_EVENTS, -1);
 		if (nfds == -1) {
-			fprintf(stderr, "epoll_wait failed\n");
+			perror("epoll_wait");
+			continue;
 		}
 
 		int j;
 		for (j = 0; j < nfds; j++) {
+			if ((events[j].events & EPOLLERR) ||
+				  (events[j].events & EPOLLHUP) ||
+				  (!(events[j].events & EPOLLIN))) {
+
+				perror("epoll");
+				//TODO delete connection from list?
+				continue;
+			}
+
 			if (events[j].data.fd == sfd) {
 				accept_connection(sfd, epfd);
+				continue;
 			} else {
 				 if (events[j].events & EPOLLIN) {
-					ssize_t bytes_sent;
-					bytes_sent = read(events[j].data.fd, recv_buf, sizeof(recv_buf));
-					recv_buf[bytes_sent] = '\0';
-					//printf("%s\n\n", recv_buf);
-					if (bytes_sent > 0) {
-					   access_buffer(NULL, recv_buf, bytes_sent, events[j].data.fd, ACT_STORE);
-					}
-				}
+					 while (1) {
+						ssize_t bytes_read;
+						bytes_read = recv(events[j].data.fd, recv_buf, sizeof(recv_buf), 0);
+
+						if (bytes_read == -1) {
+							if (errno != EAGAIN && errno != EWOULDBLOCK){
+								perror ("recv");
+							}
+
+							break;
+
+						} else if (bytes_read == 0){
+#ifdef DEBUG
+							printf("Client closed connection (%d) [main]\n", events[j].data.fd);
+#endif
+							access_connections_list(events[j].data.fd, 0, ACT_DELETE);
+							break;
+						}
+
+						recv_buf[bytes_read] = '\0';
+						printf("%s\n", recv_buf);
+#ifdef DEBUG
+						printf("Request received (%d) [main]\n", events[j].data.fd);
+#endif
+						access_buffer(NULL, recv_buf, bytes_read, events[j].data.fd, ACT_STORE);
+					 }
+				 }
 			}
 		}
 	}
-
 	return 0;
 }
 

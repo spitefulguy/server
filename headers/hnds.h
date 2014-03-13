@@ -3,7 +3,7 @@
 
 #include <unistd.h>
 
-#define IN_BUF_SIZE 512
+
 
 #define ACT_STORE 	1
 #define ACT_OBTAIN	2
@@ -18,6 +18,7 @@
 //void *wait_request(void *fd);
 //void close_connection(int cfd, char *status, int thread);
 int common_handler(const char *req_c, int fd, int thread);
+void close_connection(int fd, char *status, int thread);
 
 
 

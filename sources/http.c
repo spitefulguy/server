@@ -7,83 +7,114 @@
 #include "utils.h"
 #include "../settings.h"
 
+int get_method(struct request *sr_req, const char *s_req) {
+	if 	( !strncmp(s_req, GET, strlen(GET)) ) 					sr_req->method = GET;
+		else if ( !strncmp(s_req, POST, strlen(POST)) ) 		sr_req->method = POST;
+		else if ( !strncmp(s_req, HEAD, strlen(HEAD)) ) 		sr_req->method = HEAD;
+		else if ( !strncmp(s_req, PUT, strlen(PUT)) ) 			sr_req->method = PUT;
+		else if ( !strncmp(s_req, PATCH, strlen(PATCH)) ) 		sr_req->method = PATCH;
+		else if ( !strncmp(s_req, DELETE, strlen(DELETE)) ) 	sr_req->method = DELETE;
+		else if ( !strncmp(s_req, TRACE, strlen(TRACE)) ) 		sr_req->method = TRACE;
+		else if ( !strncmp(s_req, LINK, strlen(LINK)) ) 		sr_req->method = LINK;
+		else if ( !strncmp(s_req, UNLINK, strlen(UNLINK)) ) 	sr_req->method = UNLINK;
+		else if ( !strncmp(s_req, CONNECT, strlen(CONNECT)) )	sr_req->method = CONNECT;
+		else {
+			return -1;
+		}
+	return strlen(sr_req->method);
+}
 
+int get_uri_and_query(struct request *sr_req, const char *s_req) {
+	if (s_req[0] != '/') return -1;
 
-int encode_request(const char *req_c, struct request *req_r){
-	char *ptr;
-	char *result_c;
-	size_t size;
+	char *pc_result;
 	int result;
 
-	if 		( !strncmp(req_c, GET, strlen(GET)) ) 			req_r->method = GET;
-	else if ( !strncmp(req_c, POST, strlen(POST)) ) 		req_r->method = POST;
-	else if ( !strncmp(req_c, HEAD, strlen(HEAD)) ) 		req_r->method = HEAD;
-	else if ( !strncmp(req_c, PUT, strlen(PUT)) ) 			req_r->method = PUT;
-	else if ( !strncmp(req_c, PATCH, strlen(PATCH)) ) 		req_r->method = PATCH;
-	else if ( !strncmp(req_c, DELETE, strlen(DELETE)) ) 	req_r->method = DELETE;
-	else if ( !strncmp(req_c, TRACE, strlen(TRACE)) ) 		req_r->method = TRACE;
-	else if ( !strncmp(req_c, LINK, strlen(LINK)) ) 		req_r->method = LINK;
-	else if ( !strncmp(req_c, UNLINK, strlen(UNLINK)) ) 	req_r->method = UNLINK;
-	else if ( !strncmp(req_c, CONNECT, strlen(CONNECT)) )	req_r->method = CONNECT;
+	char *pc_line_end = strstr(s_req, HTTP_LINE_ENDING);
+	if (!pc_line_end) return -1;
+
+	size_t size;
+
+	pc_result = strchr(s_req, '?');
+	if (pc_result && pc_result < pc_line_end) {
+		size = pc_result - s_req;
+	} else {
+		pc_result = strstr(s_req, " HTTP/");
+		if (!pc_result) return -1;
+
+		size = pc_result - s_req;
+	}
+
+	sr_req->uri = malloc(sizeof(char) * (size + 1));
+	result = percent_decode(s_req, size, sr_req->uri, size);
+	if ( result == -1) {
+		printf("Error decoding URI\n");
+		free(sr_req->uri);
+
+		return -1;
+	}
+	sr_req->uri[result] = '\0';
+//TODO query parsing
+	return size;
+}
+
+int get_http_version(struct request *sr_req, const char *s_req) {
+	if 		(memcmp( (s_req), HTTP_09, strlen(HTTP_09))) sr_req->version = HTTP_09;
+	else if (memcmp( (s_req), HTTP_10, strlen(HTTP_10))) sr_req->version = HTTP_10;
+	else if (memcmp( (s_req), HTTP_11, strlen(HTTP_11))) sr_req->version = HTTP_11;
 	else {
-		printf("Wrong method\n");
 		return -1;
 	}
 
-	ptr = req_c + strlen(req_r->method);
+	return strlen(sr_req->version);
+}
 
-	if (*(++ptr) != '/') {
+
+int encode_request(const char *s_req, struct request *sr_req){
+	char *ptr = s_req;
+	int result;
+
+	result = get_method(sr_req, ptr);
+	if (result == -1) {
+		printf("Wrong method\n");
+
+		return -1;
+	}
+	ptr += result;
+
+	result = get_uri_and_query(sr_req, ++ptr);
+	if (result == -1) {
 		printf("Wrong URI\n");
+
+		return -1;
+	}
+	ptr += result;
+
+	if (strstr(sr_req->uri, "../")) {
+		printf("Request contains ../\n");
+		free(sr_req->uri);
+
+		return -1;
+	}
+
+	result = get_http_version(sr_req, ++ptr);
+	if (result == -1) {
+		printf("Wrong version\n");
+		free(sr_req->uri);
+
+		return -1;
+	}
+
+
+	if (!strstr(ptr, HTTP_REQ_END)) {
+		printf("Request incomplete\n %s\n", s_req);
+		free(sr_req->uri);
+
 		return -1;
 	}
 
 	//TODO parse "Connection:"
-	req_r->connection = HTTP_CLOSE;
-
-	result_c = strchr(ptr, '?');
-	if (result_c) {
-		size = result_c - ptr;
-	} else {
-		if ((result_c = strstr(ptr, " HTTP/")))
-			size = result_c - ptr;
-		else
-			return -1;
-	}
-
-	req_r->uri = (char *)malloc(sizeof(char) * (size + 1));
-
-	//printf("URI to be decoded %.*s\n", (int)size, ptr);
-	result = percent_decode(ptr, size, req_r->uri, size);
-	if ( result == -1) {
-		free(req_r->uri);
-		printf("Error decoding URI\n");
-		return -1;
-	}
-	req_r->uri[result] = '\0';
-
-	//printf("Requested path %s\nsize %d\nresult %d", req_r->uri, size, result);
-
-	if (strstr(req_r->uri, "../")) {
-		free(req_r->uri);
-		return -1;
-	}
-	//printf("URI after decoding %s\n", req_r->uri);
-
-	ptr += size;
-	if 		(memcmp( (++ptr), HTTP_09, strlen(HTTP_09))) req_r->version = HTTP_09;
-	else if (memcmp( (++ptr), HTTP_10, strlen(HTTP_10))) req_r->version = HTTP_10;
-	else if (memcmp( (++ptr), HTTP_11, strlen(HTTP_11))) req_r->version = HTTP_11;
-	else {
-		printf("Wrong version\n");
-		free(req_r->uri);
-		return -1;
-	}
-
-	if (!strstr(ptr, HTTP_REQ_END)) {
-		printf("Request incomplete\n %s\n", req_c);
-		free(req_r->uri);
-		return -1;
-	}
+	sr_req->connection = HTTP_CLOSE;
 
 	return 0;
 }
@@ -124,5 +155,4 @@ int set_headers(char *headers, char *status, ssize_t filesize, char* ext){
 				date);
 	}
 
-	//return 0;
 }
