@@ -142,12 +142,16 @@ int set_headers(char *headers, char *status, ssize_t filesize, char* ext){
 	strftime(date, 64, "%a, %e %b %Y %X %Z\r\n", &tm);
 
 	if (!strcmp(status, HTTP_200)) {
-		return sprintf(headers, "%sServer: %sDate: %sContent-Type: %sContent-Length: %d\r\nConnection: close\r\n\r\n",
+		return sprintf(headers, "%sServer: %sDate:%s"
+				"Content-Type: %s"
+				"Content-Length: %d\r\n"
+				"Connection: %s\r\n",
 				HTTP_200,
 				SERVER_NAME,
 				date,
 				get_content_type(ext),
-				(int)filesize);
+				(int)filesize,
+				HTTP_CLOSE);
 	} else {
 		return sprintf(headers, "%sServer: %sDate: %sConnection: close\r\n\r\n",
 				status,

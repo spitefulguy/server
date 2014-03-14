@@ -3,6 +3,7 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <netdb.h>
 
 #include <netinet/in.h>
 //#include <fcntl.h>
@@ -41,7 +42,7 @@ int init_socket() {
 
 int accept_connection(int sfd, int epfd){
 	unsigned int addr_len;
-	struct sockaddr_in client_addr;
+	struct sockaddr client_addr;
 	addr_len = sizeof(client_addr);
 	int cfd;
 
@@ -63,9 +64,22 @@ int accept_connection(int sfd, int epfd){
 			return -1;
 		}
 
-		//access_connections_list(cfd, 0, ACT_STORE);
-		printf("Connection %d accepted\n", cfd);
+#ifdef DEBUG
+		char s_host[56];
+		char s_serv[56];
+		int status = getnameinfo(&client_addr, addr_len,
+				s_host, sizeof(s_host),
+				s_serv, sizeof(s_serv),
+				NI_NUMERICHOST | NI_NUMERICSERV);
+		if (0 == status) {
+			printf("Accepted connection on descriptor %d "
+			"(host=%s, port=%s)\n", cfd, s_host, s_serv);
+		} else {
+			printf("Connection %d accepted\n", cfd);
+		}
+#endif
 	}
+
 	return 0;
 }
 
@@ -128,9 +142,9 @@ int main(int argc, char **argv) {
 			if ((events[j].events & EPOLLERR) ||
 				  (events[j].events & EPOLLHUP) ||
 				  (!(events[j].events & EPOLLIN))) {
-
+#ifdef DEBUG
 				perror("epoll");
-				//TODO delete connection from list?
+#endif
 				continue;
 			}
 
@@ -154,7 +168,7 @@ int main(int argc, char **argv) {
 #ifdef DEBUG
 							printf("Client closed connection (%d) [main]\n", events[j].data.fd);
 #endif
-							//access_connections_list(events[j].data.fd, 0, ACT_DELETE);
+							close(events[j].data.fd);
 							break;
 						}
 
@@ -164,7 +178,6 @@ int main(int argc, char **argv) {
 						printf("Request received (%d) [main]\n", events[j].data.fd);
 #endif
 						queue_push(recv_buf, bytes_read, events[j].data.fd);
-						//access_buffer(NULL, recv_buf, bytes_read, events[j].data.fd, ACT_STORE);
 					 }
 				 }
 			}

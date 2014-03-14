@@ -36,11 +36,7 @@ void close_connection(int fd, char *status, int thread) {
 	printf("Closing connection (%d)\n", fd);
 #endif
 
-	//close(fd);
-	shutdown(fd, SHUT_RDWR);
-	if (thread != -1) {
-		//access_connections_list(fd, thread, ACT_DELETE);
-	}
+	close(fd);
 }
 
 static int get_headers(char *headers, char *status, char *ext, ssize_t size){
@@ -53,11 +49,11 @@ static ssize_t send_data(int fd, void *data, size_t length) {
 
 	to_send = length;
 	while (1){
-
 		bytes_sent = send(fd, data, to_send, MSG_NOSIGNAL);
 		if ( -1 == bytes_sent ){
-			perror("send");
-			return -1;
+			//perror("send");
+			if (errno != EAGAIN) return -1;
+			bytes_sent = 0;
 		}
 		if ( length == bytes_sent ) break;
 
@@ -67,7 +63,7 @@ static ssize_t send_data(int fd, void *data, size_t length) {
 
 		struct timeval interval;
 		interval.tv_sec = 0;
-		interval.tv_usec = 5;
+		interval.tv_usec = CHUNK_INTERVAL_USEC;
 		fd_set set;
 		FD_SET(fd, &set);
 		select(2, NULL, &set, NULL, &interval);
@@ -78,8 +74,6 @@ static ssize_t send_data(int fd, void *data, size_t length) {
 }
 
 static ssize_t open_file(struct stat *st_buf, int *source_d_buf, const char *path) {
-
-	printf("file requested %s\n", path);
 
 	*source_d_buf = open(path, O_RDONLY);
 	if ( -1 == *source_d_buf) {
@@ -120,11 +114,7 @@ static ssize_t static_handler(int fd, struct request *sr_request, int thread) {
 	char ext[10];
 
 
-	printf ("uri %s\n", sr_request->uri);
-
-
 	if (!get_extension(ext, sr_request->uri)) {
-		printf("NO EXTENSION \n");
 		char fullpath[strlen(ROOT) + strlen(sr_request->uri) + strlen(DEFAULT_PAGE) + 1];
 		sprintf(fullpath, "%s%s%s", ROOT, sr_request->uri, DEFAULT_PAGE);
 
@@ -240,7 +230,8 @@ int common_handler(const char *s_request, int fd, int thread) {
 		return 0;
 	}
 
-	printf("%zd\n", static_handler(fd, &sr_request, thread));
+	static_handler(fd, &sr_request, thread);
+	//printf("%zd\n", );
 	free(sr_request.uri);
 
 
