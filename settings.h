@@ -11,7 +11,7 @@
 
 #define LOCAL_PORT 80
 
-#define WORKERS 1
+#define THREADS 1
 
 #define MAX_LISTEN 64
 #define MAX_EPOLL_EVENTS 64

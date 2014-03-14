@@ -1,5 +1,4 @@
 #define _GNU_SOURCE
-//#define DEBUG
 
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -17,7 +16,7 @@
 #include <pthread.h>
 
 #include "settings.h"
-#include "buffer.h"
+#include "queue.h"
 
 
 #define PARAM_UNUSED 1
@@ -64,7 +63,7 @@ int accept_connection(int sfd, int epfd){
 			return -1;
 		}
 
-		access_connections_list(cfd, 0, ACT_STORE);
+		//access_connections_list(cfd, 0, ACT_STORE);
 		printf("Connection %d accepted\n", cfd);
 	}
 	return 0;
@@ -76,7 +75,7 @@ int main(int argc, char **argv) {
 	int sfd;
 
 	char recv_buf[MAX_REQUEST_LENGTH];
-	pthread_t threads[WORKERS];
+	pthread_t threads[THREADS];
 
 	sfd = init_socket();
 	if (sfd < 0) {
@@ -109,9 +108,10 @@ int main(int argc, char **argv) {
 	}
 
 	int i;
-	for (i = 0; i < WORKERS; i++) {
+	for (i = 0; i < THREADS; i++) {
 		pthread_create(&threads[i], NULL, wait_for_request, (void *)i);
 	}
+	queue_init();
 
 	printf("Server has started successfully\n");
 
@@ -154,16 +154,17 @@ int main(int argc, char **argv) {
 #ifdef DEBUG
 							printf("Client closed connection (%d) [main]\n", events[j].data.fd);
 #endif
-							access_connections_list(events[j].data.fd, 0, ACT_DELETE);
+							//access_connections_list(events[j].data.fd, 0, ACT_DELETE);
 							break;
 						}
 
 						recv_buf[bytes_read] = '\0';
-						printf("%s\n", recv_buf);
+						//printf("%s\n", recv_buf);
 #ifdef DEBUG
 						printf("Request received (%d) [main]\n", events[j].data.fd);
 #endif
-						access_buffer(NULL, recv_buf, bytes_read, events[j].data.fd, ACT_STORE);
+						queue_push(recv_buf, bytes_read, events[j].data.fd);
+						//access_buffer(NULL, recv_buf, bytes_read, events[j].data.fd, ACT_STORE);
 					 }
 				 }
 			}

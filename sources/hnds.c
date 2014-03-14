@@ -17,7 +17,7 @@
 #include "../settings.h"
 #include "http.h"
 #include "utils.h"
-#include "buffer.h"
+#include "queue.h"
 
 #define HEADERS_SIZE 512
 
@@ -36,10 +36,10 @@ void close_connection(int fd, char *status, int thread) {
 	printf("Closing connection (%d)\n", fd);
 #endif
 
-	close(fd);
+	//close(fd);
 	shutdown(fd, SHUT_RDWR);
 	if (thread != -1) {
-		access_connections_list(fd, thread, ACT_DELETE);
+		//access_connections_list(fd, thread, ACT_DELETE);
 	}
 }
 
