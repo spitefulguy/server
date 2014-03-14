@@ -7,7 +7,7 @@
 
 #include "hnds.h"
 #include "http.h"
-#include "../settings.h"
+#include "settings.h"
 
 struct item {
 	char *request;

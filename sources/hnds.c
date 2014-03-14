@@ -1,4 +1,4 @@
-#include <hnds.h>
+
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -14,10 +14,11 @@
 #include <errno.h>
 #include <sys/types.h>
 
-#include "../settings.h"
-#include "http.h"
-#include "utils.h"
-#include "queue.h"
+#include "../headers/settings.h"
+#include "../headers/hnds.h"
+#include "../headers/http.h"
+#include "../headers/utils.h"
+#include "../headers/queue.h"
 
 #define HEADERS_SIZE 512
 

@@ -1,11 +1,11 @@
-#include "http.h"
+#include "../headers/http.h"
 #include <stdlib.h>
 #include "string.h"
 #include "stdio.h"
 #include <time.h>
 
 #include "utils.h"
-#include "../settings.h"
+#include "settings.h"
 
 int get_method(struct request *sr_req, const char *s_req) {
 	if 	( !strncmp(s_req, GET, strlen(GET)) ) 					sr_req->method = GET;

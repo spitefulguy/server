@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "utils.h"
 
 int get_extension(char *ext_buf, const char *filename) {
 	int len = strlen(filename);

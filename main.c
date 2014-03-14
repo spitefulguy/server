@@ -6,12 +6,11 @@
 #include <netdb.h>
 
 #include <netinet/in.h>
-//#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "http.h"
-#include "hnds.h"
+#include "headers/http.h"
+#include "headers/hnds.h"
 
 #include <errno.h>
 #include <pthread.h>
