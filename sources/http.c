@@ -91,7 +91,6 @@ int encode_request(const char *s_req, struct request *sr_req){
 	ptr += result;
 
 	if (strstr(sr_req->uri, "../")) {
-		printf("Request contains ../\n");
 		free(sr_req->uri);
 
 		return -1;

@@ -19,6 +19,7 @@
 #include "../headers/http.h"
 #include "../headers/utils.h"
 #include "../headers/queue.h"
+#include "../headers/config.h"
 
 #define HEADERS_SIZE 512
 
@@ -64,7 +65,7 @@ static ssize_t send_data(int fd, void *data, size_t length) {
 
 		struct timeval interval;
 		interval.tv_sec = 0;
-		interval.tv_usec = CHUNK_INTERVAL_USEC;
+		interval.tv_usec = get_send_retry_interval_usec();
 		fd_set set;
 		FD_SET(fd, &set);
 		select(2, NULL, &set, NULL, &interval);
@@ -114,12 +115,15 @@ static ssize_t static_handler(int fd, struct request *sr_request, int thread) {
 	ssize_t result_total = 0;
 	char ext[10];
 
+	const char *static_dir = get_static_dir();
+	const char *default_page = get_default_page();
+
 
 	if (!get_extension(ext, sr_request->uri)) {
-		char fullpath[strlen(ROOT) + strlen(sr_request->uri) + strlen(DEFAULT_PAGE) + 1];
-		sprintf(fullpath, "%s%s%s", ROOT, sr_request->uri, DEFAULT_PAGE);
+		char fullpath[strlen(static_dir) + strlen(sr_request->uri) + strlen(default_page) + 1];
+		sprintf(fullpath, "%s%s%s", static_dir, sr_request->uri, default_page);
 
-		if (!get_extension(ext, DEFAULT_PAGE) ) {
+		if (!get_extension(ext, default_page) ) {
 			headers_size = get_headers(headers, HTTP_404, NULL, 0);
 			close_connection(fd, HTTP_404, thread);
 			return 0;
@@ -163,8 +167,8 @@ static ssize_t static_handler(int fd, struct request *sr_request, int thread) {
 
 
 
-	char fullpath[strlen(ROOT) + strlen(sr_request->uri) + 1];
-	sprintf(fullpath, "%s%s", ROOT, sr_request->uri);
+	char fullpath[strlen(static_dir) + strlen(sr_request->uri) + 1];
+	sprintf(fullpath, "%s%s", static_dir, sr_request->uri);
 	if ( -1 == open_file(&st, &source_d, fullpath) ) {
 			headers_size = get_headers(headers, HTTP_404, NULL, 0);
 			close_connection(fd, HTTP_404, thread);
@@ -203,7 +207,7 @@ static ssize_t static_handler(int fd, struct request *sr_request, int thread) {
 }
 
 int validate_method(char *method) {
-	if (strstr(METHODS_TO_FORBID, method))
+	if (strstr(get_methods_to_forbid(), method))
 		return 0;
 	else
 		return 1;
@@ -213,12 +217,14 @@ int common_handler(const char *s_request, int fd, int thread) {
 	struct request sr_request;
 
 	int encode_status;
+
 	encode_status = encode_request(s_request, &sr_request);
 
 	if (encode_status == -1) {
 		close_connection(fd, HTTP_400, thread);
 		return 0;
 	}
+
 	if (!validate_method(sr_request.method)) {
 		close_connection(fd, HTTP_405, thread);
 		return 0;
@@ -231,11 +237,9 @@ int common_handler(const char *s_request, int fd, int thread) {
 		return 0;
 	}
 
+
 	static_handler(fd, &sr_request, thread);
-	//printf("%zd\n", );
 	free(sr_request.uri);
-
-
 
 return 0;
 

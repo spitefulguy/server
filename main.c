@@ -17,6 +17,7 @@
 
 #include "settings.h"
 #include "queue.h"
+#include "config.h"
 
 
 #define PARAM_UNUSED 1
@@ -31,7 +32,7 @@ int init_socket() {
 
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	server_addr.sin_port = htons(LOCAL_PORT);
+	server_addr.sin_port = htons(get_local_port());
 
 	if (bind(sfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1)
 		return -1;
@@ -88,7 +89,14 @@ int main(int argc, char **argv) {
 	int sfd;
 
 	char recv_buf[MAX_REQUEST_LENGTH];
-	pthread_t threads[THREADS];
+
+	int status ;
+	status = init_config(CONFIG_PATH);
+	if ( -1 == status) {
+		perror("file");
+		printf("Error reading config file %s\n", CONFIG_PATH);
+		return -1;
+	}
 
 	sfd = init_socket();
 	if (sfd < 0) {
@@ -120,11 +128,16 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 
-	int i;
-	for (i = 0; i < THREADS; i++) {
-		pthread_create(&threads[i], NULL, wait_for_request, (void *)i);
-	}
+	const int threads = get_number_of_threads();
 	queue_init();
+	pthread_t threads_ids;
+	int i;
+	for (i = 0; i < threads; i++) {
+		int *thread = malloc(sizeof(int));
+		*thread = i;
+		pthread_create(&threads_ids, NULL, wait_for_request, (void *)thread);
+	}
+
 
 	printf("Server has started successfully\n");
 
@@ -174,7 +187,7 @@ int main(int argc, char **argv) {
 						recv_buf[bytes_read] = '\0';
 						//printf("%s\n", recv_buf);
 #ifdef DEBUG
-						printf("Request received (%d) [main]\n", events[j].data.fd);
+						printf("Request received (%d)\n", events[j].data.fd);
 #endif
 						queue_push(recv_buf, bytes_read, events[j].data.fd);
 					 }

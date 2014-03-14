@@ -8,6 +8,7 @@
 #include "hnds.h"
 #include "http.h"
 #include "settings.h"
+#include "config.h"
 
 struct item {
 	char *request;
@@ -19,11 +20,14 @@ struct item {
 struct item **head;
 static pthread_mutex_t *queue_mutex;
 
+
 void queue_init() {
-	head = calloc(THREADS, sizeof(struct item*));
-	queue_mutex = malloc(sizeof(pthread_mutex_t) * THREADS);
+	const int threads = get_number_of_threads();
+
+	head = calloc(threads, sizeof(struct item*));
+	queue_mutex = malloc(sizeof(pthread_mutex_t) * threads);
 	int i;
-	for (i = 0; i < THREADS; i++) {
+	for (i = 0; i < threads; i++) {
 		queue_mutex[i] = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
 	}
 }
@@ -58,7 +62,7 @@ void queue_push(char *s_request, ssize_t length, int fd) {
 
 	push(s_request, length, fd, thread);
 
-	if (++thread == THREADS) thread = 0;
+	if (++thread == get_number_of_threads()) thread = 0;
 }
 
 size_t queue_pop(char *s_request_buf, int *fd_buf, int thread) {
@@ -84,15 +88,15 @@ size_t queue_pop(char *s_request_buf, int *fd_buf, int thread) {
 
 
 void *wait_for_request(void *this_thread) {
-	int this = (int)this_thread;
+	int *this = (int *)this_thread;
 
 	char s_request[MAX_REQUEST_LENGTH] = { 0 };
 	ssize_t length;
 
 	int fd;
 	while (1) {
-		if ( (length = queue_pop(s_request, &fd, this)) )
-			common_handler(s_request, fd, this);
+		if ( (length = queue_pop(s_request, &fd, *this)) )
+			common_handler(s_request, fd, *this);
 	}
 	return 0;
 }
