@@ -185,7 +185,7 @@ int main(int argc, char **argv) {
 						}
 
 						recv_buf[bytes_read] = '\0';
-						//printf("%s\n", recv_buf);
+						printf("REQUEST: \n%s\n", recv_buf);
 #ifdef DEBUG
 						printf("Request received (%d)\n", events[j].data.fd);
 #endif

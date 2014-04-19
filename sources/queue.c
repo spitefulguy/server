@@ -19,6 +19,7 @@ struct item {
 
 struct item **head;
 static pthread_mutex_t *queue_mutex;
+static pthread_cond_t *queue_cond;
 
 
 void queue_init() {
@@ -26,9 +27,11 @@ void queue_init() {
 
 	head = calloc(threads, sizeof(struct item*));
 	queue_mutex = malloc(sizeof(pthread_mutex_t) * threads);
+	queue_cond = malloc(sizeof(pthread_cond_t) * threads);
 	int i;
 	for (i = 0; i < threads; i++) {
 		queue_mutex[i] = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+		queue_cond[i] = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
 	}
 }
 
@@ -54,6 +57,7 @@ static void push(char *s_request, ssize_t length, int fd, int thread){
 	item->request = malloc(sizeof(char) * (length + 1));
 	memcpy(item->request, s_request, length + 1);
 
+	pthread_cond_signal(&queue_cond[thread]);
 	pthread_mutex_unlock(&queue_mutex[thread]);
 }
 
@@ -67,11 +71,12 @@ void queue_push(char *s_request, ssize_t length, int fd) {
 
 size_t queue_pop(char *s_request_buf, int *fd_buf, int thread) {
 
-	if (!head[thread]) return 0;
+	pthread_mutex_lock(&queue_mutex[thread]);
+	if (!head[thread]) {
+		pthread_cond_wait(&queue_cond[thread], &queue_mutex[thread]);
+	}
 
 	struct item *item = head[thread];
-
-	pthread_mutex_lock(&queue_mutex[thread]);
 
 	size_t length = item->length;
 	*fd_buf = item->fd;
