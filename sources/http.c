@@ -69,6 +69,27 @@ int get_http_version(struct request *sr_req, const char *s_req) {
 	return strlen(sr_req->version);
 }
 
+int security_check(char *uri) {
+	int depth = 0;
+	char *ptr_uri = uri;
+
+	while (*(++ptr_uri)) {
+		if (*ptr_uri == '/') {
+
+			if (*(ptr_uri - 1) != '.') {
+				depth ++;
+			} else if ( (ptr_uri - uri) >= 2 && *(ptr_uri - 2) == '.' && *(ptr_uri - 1) == '.') {
+				depth--;
+			}
+		}
+	}
+
+	if (depth < 0) {
+		return -1;
+	}
+	return 0;
+}
+
 
 int encode_request(const char *s_req, struct request *sr_req){
 	char *ptr = s_req;
@@ -84,21 +105,24 @@ int encode_request(const char *s_req, struct request *sr_req){
 
 	result = get_uri_and_query(sr_req, ++ptr);
 	if (result == -1) {
+#ifdef DEBUG
 		printf("Wrong URI\n");
+#endif
 
 		return -1;
 	}
 	ptr += result;
 
-	if (strstr(sr_req->uri, "../")) {
+	if ( -1 == security_check(sr_req->uri) ){
 		free(sr_req->uri);
-
 		return -1;
 	}
 
 	result = get_http_version(sr_req, ++ptr);
 	if (result == -1) {
+#ifdef DEBUG
 		printf("Wrong version\n");
+#endif
 		free(sr_req->uri);
 
 		return -1;
@@ -106,7 +130,9 @@ int encode_request(const char *s_req, struct request *sr_req){
 
 
 	if (!strstr(ptr, HTTP_REQ_END)) {
+#ifdef DEBUG
 		printf("Request incomplete\n %s\n", s_req);
+#endif
 		free(sr_req->uri);
 
 		return -1;
@@ -143,13 +169,13 @@ int set_headers(char *headers, char *status, ssize_t filesize, char* ext){
 	if (!strcmp(status, HTTP_200)) {
 		return sprintf(headers, "%sServer: %sDate:%s"
 				"Content-Type: %s"
-				"Content-Length: %d\r\n"
+				"Content-Length: %zd\r\n"
 				"Connection: %s\r\n",
 				HTTP_200,
 				SERVER_NAME,
 				date,
 				get_content_type(ext),
-				(int)filesize,
+				filesize,
 				HTTP_CLOSE);
 	} else {
 		return sprintf(headers, "%sServer: %sDate: %sConnection: close\r\n\r\n",
