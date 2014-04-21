@@ -103,9 +103,6 @@ static void *map_file(int file_d, struct stat *st) {
 
 
 static ssize_t static_handler(int fd, struct request *sr_request, int thread) {
-
-	//TODO head method handle
-
 	char headers[HEADERS_SIZE];
 	int headers_size;
 	int source_d ;
@@ -118,93 +115,59 @@ static ssize_t static_handler(int fd, struct request *sr_request, int thread) {
 	const char *static_dir = get_static_dir();
 	const char *default_page = get_default_page();
 
+	char *fullpath;
 
-	if (!get_extension(ext, sr_request->uri)) {
-		char fullpath[strlen(static_dir) + strlen(sr_request->uri) + strlen(default_page) + 1];
-		sprintf(fullpath, "%s%s%s", static_dir, sr_request->uri, default_page);
+	fullpath = malloc((strlen(static_dir) + strlen(sr_request->uri) + strlen(default_page) + 1 )*sizeof(char));
+	sprintf(fullpath, "%s%s", static_dir, sr_request->uri);
 
-		if (!get_extension(ext, default_page) ) {
-			headers_size = get_headers(headers, HTTP_404, NULL, 0);
-			close_connection(fd, HTTP_404, thread);
-			return 0;
-		}
+	if ( -1 == open_file(&st, &source_d, fullpath) ){
+		close_connection(fd, HTTP_404, thread);
+		return 0;
+	}
 
+	if (S_ISDIR(st.st_mode)) {
+		close(source_d);
+		strcat(fullpath, default_page);
 		if ( -1 == open_file(&st, &source_d, fullpath) ){
 			close_connection(fd, HTTP_403, thread);
 			return 0;
 		}
+	}
 
-		headers_size = get_headers(headers, HTTP_200, ext, st.st_size);
-		result = send_data(fd, headers, headers_size);
+	get_extension(ext, fullpath);
+
+	headers_size = get_headers(headers, HTTP_200, ext, st.st_size);
+	result = send_data(fd, headers, headers_size);
+	if ( -1 == result) {
+#ifdef DEBUG
+		printf("Error while sending headers for %s (%d)\n", fullpath, fd);
+#endif
+		close_connection(fd, NULL, thread);
+		return -1;
+	}
+	result_total += result;
+
+	file_map = map_file(source_d, &st);
+	if (!file_map) {
+		close_connection(fd, HTTP_500, thread);
+	}
+
+	if (!strstr(sr_request->method, HEAD)) {
+		result = send_data(fd, file_map, st.st_size);
 		if ( -1 == result) {
 #ifdef DEBUG
-			printf("Error while sending headers for %s (%d)\n", fullpath, fd);
+			printf("Error while sending file %s (%d)\n", fullpath, fd);
 #endif
 			close_connection(fd, NULL, thread);
 			return -1;
 		}
-		result_total += result;
-
-		file_map = map_file(source_d, &st);
-		if (!file_map) {
-			close_connection(fd, HTTP_500, thread);
-		}
-		if (!strstr(sr_request->method, HEAD)) {
-			result = send_data(fd, file_map, st.st_size);
-			if ( -1 == result) {
-#ifdef DEBUG
-				printf("Error while sending file %s (%d)\n", fullpath, fd);
-#endif
-				close_connection(fd, NULL, thread);
-				return -1;
-			}
-		}
-		result_total += result;
-
-		return result_total;
-		close_connection(fd, NULL, thread);
 	}
+	result_total += result;
 
-
-
-	char fullpath[strlen(static_dir) + strlen(sr_request->uri) + 1];
-	sprintf(fullpath, "%s%s", static_dir, sr_request->uri);
-	if ( -1 == open_file(&st, &source_d, fullpath) ) {
-			headers_size = get_headers(headers, HTTP_404, NULL, 0);
-			close_connection(fd, HTTP_404, thread);
-			return 0;
-		} else {
-
-			headers_size = get_headers(headers, HTTP_200, ext, st.st_size);
-			result = send_data(fd, headers, headers_size);
-			if ( -1 == result) {
-#ifdef DEBUG
-				printf("Error while sending headers for %s (%d)\n", fullpath, fd);
-#endif
-				close_connection(fd, NULL, thread);
-				return -1;
-			}
-			result_total += result;
-			file_map = map_file(source_d, &st);
-			if (!file_map) {
-				close_connection(fd, HTTP_500, thread);
-			}
-			if (!strstr(sr_request->method, HEAD)) {
-				result = send_data(fd, file_map, st.st_size);
-				if ( -1 == result) {
-#ifdef DEBUG
-					printf("Error while sending file %s (%d)\n", fullpath, fd);
-#endif
-					close_connection(fd, NULL, thread);
-					return -1;
-				}
-				result_total += result;
-			}
-		}
 	close_connection(fd, NULL, thread);
 	return result_total;
-
 }
+
 
 int validate_method(char *method) {
 	if (strstr(get_methods_to_forbid(), method))
@@ -212,6 +175,7 @@ int validate_method(char *method) {
 	else
 		return 1;
 }
+
 
 int common_handler(const char *s_request, int fd, int thread) {
 	struct request sr_request;

@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
 	status = init_config(CONFIG_PATH);
 	if ( -1 == status) {
 		perror("file");
-		printf("Error reading config file %s\n", CONFIG_PATH);
+		printf("Error reading configuration file %s\n", CONFIG_PATH);
 		return -1;
 	}
 
